@@ -1,7 +1,10 @@
 import os
 import json
+import logging
 from flask import Flask, request
 from jit import jit_cleaner
+
+logging.basicConfig()
 
 app = Flask(__name__)
 
@@ -19,11 +22,8 @@ def scheduler():
     if content_type != 'application/json':
         return "Content type is not supported."
 
-    json_data = request.get_json()
-    age = json_data['age']
-    name = os.environ.get("NAME", "World")
     jit_cleaner.jit_cleaner()
-    return json.dumps({'name': name, 'age': age})
+    return json.dumps({})
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
