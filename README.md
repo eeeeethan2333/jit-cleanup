@@ -20,4 +20,7 @@ gcloud run deploy ${SERVICE} \
 SUBSCRIPTION_ID="jit-sub"
 TOPIC_ID="jit-access"
 gcloud pubsub subscriptions create $SUBSCRIPTION_ID --topic=$TOPIC_ID --project=$PROJECT_ID
+
+gcloud scheduler jobs create http jit-cleanup --schedule "0 * * * *" --uri "https://jit-cleanup-y3xxuiynlq-as.a.run.app/scheduler" --http-method POST --message-body='{}'
+
 ```

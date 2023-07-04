@@ -4,7 +4,14 @@ import logging
 from flask import Flask, request
 from jit import jit_cleaner
 
-logging.basicConfig()
+logger = logging.getLogger("my-app")
+# Convenient methods in order of verbosity from highest to lowest
+logger.debug("this will get printed")
+logger.info("this will get printed")
+logger.warning("this will get printed")
+logger.error("this will get printed")
+logger.critical("this will get printed")
+
 
 app = Flask(__name__)
 
