@@ -6,6 +6,7 @@ class MessageOrigin(Enum):
     ERROR = "jit-error"
     NOTIFICATION = "jit-notification"
     TEST = "jit-test"
+    NOT_IMPLEMENTED = "not-implemented"
 
     @classmethod
     def from_str(cls, label):
@@ -16,4 +17,4 @@ class MessageOrigin(Enum):
         elif label == "jit-notification":
             return cls.NOTIFICATION
         else:
-            raise NotImplementedError
+            return cls.NOT_IMPLEMENTED

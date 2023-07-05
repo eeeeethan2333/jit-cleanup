@@ -5,11 +5,6 @@ FROM python:3.11-slim
 # Allow statements and log messages to immediately appear in the logs
 ENV PYTHONUNBUFFERED True
 
-RUN apt-get update -y
-RUN apt-get install -y apt-transport-https ca-certificates gnupg curl
-RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] http://packages.cloud.google.com/apt cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list && curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key --keyring /usr/share/keyrings/cloud.google.gpg  add - && apt-get update -y && apt-get install google-cloud-cli -y
-
-
 # Copy local code to the container image and Install production dependencies.
 ENV APP_HOME /app
 WORKDIR $APP_HOME

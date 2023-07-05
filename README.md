@@ -1,10 +1,12 @@
 
 ```shell
 REGION=asia-southeast1
-PROJECT_ID=xxxxxxx
+PROJECT_ID=ethanhanjoonix-proj1
 SERVICE=jit-cleanup
 SERVICE_ACCOUNT_EMAIL=jitaccess@xxxxxxx.iam.gserviceaccount.com
 REPO_NAME=jit-repo
+PUBSUB_TOPIC_NAME=projects/ethanhanjoonix-proj1/topics/jit-access
+PUBSUB_SUBSCRIPTION_PATH=projects/ethanhanjoonix-proj1/subscriptions/jit-sub
 
 docker build --platform linux/amd64 -t ${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${SERVICE}:latest .
 docker push ${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${SERVICE}:latest
@@ -13,6 +15,10 @@ gcloud run deploy ${SERVICE} \
 --service-account=${SERVICE_ACCOUNT_EMAIL} \
 --region=${REGION} \
 --port=8080 \
+--set-env-vars "PROJECT_ID=${PROJECT_ID}" \
+--set-env-vars "PUBSUB_TOPIC_NAME=${PUBSUB_TOPIC_NAME}" \
+--set-env-vars "PUBSUB_SUBSCRIPTION_PATH=${PUBSUB_SUBSCRIPTION_PATH}" \
+--set-env-vars "NUM_MESSAGES=100" \
 --memory=2G
 
 # --set-env-vars=CAI_BUCKET_NAME=${_CAI_BUCKET_NAME} \
