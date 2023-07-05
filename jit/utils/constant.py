@@ -3,6 +3,7 @@ from enum import Enum
 
 class MessageOrigin(Enum):
     APPROVAL = "jit-approval"
+    BINDING = "jit-binding"
     ERROR = "jit-error"
     NOTIFICATION = "jit-notification"
     TEST = "jit-test"
@@ -16,5 +17,7 @@ class MessageOrigin(Enum):
             return cls.ERROR
         elif label == "jit-notification":
             return cls.NOTIFICATION
+        elif label == "jit-binding":
+            return cls.BINDING
         else:
             return cls.NOT_IMPLEMENTED
