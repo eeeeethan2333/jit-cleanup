@@ -21,8 +21,11 @@ Instead of storing state in a database, we can use PubSub to store events until 
 
 
 ## Deployment setup
+### Before You Start
 Make sure you have the [JIT developed in your GCP environment](https://cloud.google.com/architecture/manage-just-in-time-privileged-access-to-project)
 
+
+### Deploy code
 ```shell
 REGION=asia-southeast1
 PROJECT_ID=xxx
@@ -54,4 +57,15 @@ gcloud pubsub subscriptions create $SUBSCRIPTION_ID --topic=$TOPIC_ID --project=
 
 gcloud scheduler jobs create http jit-cleanup --schedule "0 * * * *" --uri "https://jit-cleanup-y3xxuiynlq-as.a.run.app/scheduler" --oidc-service-account-email=${SERVICE_ACCOUNT_EMAIL} --http-method POST --headers Content-Type=application/json --message-body='{}'
 
+```
+
+
+### Local Development
+
+```bash
+export NUM_MESSAGES=100
+export PROJECT_ID=xxx
+export PUBSUB_SUBSCRIPTION_PATH=projects/xxx/subscriptions/jit-sub
+export PUBSUB_TOPIC_NAME=projects/xxx/topics/jit-access
+python main.py
 ```
