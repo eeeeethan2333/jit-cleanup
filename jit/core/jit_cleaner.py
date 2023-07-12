@@ -44,16 +44,15 @@ def modify_policy_remove_member(conf: config.JitConfig, target_project: str,
         if (
           role == b["role"] and
           member in b["members"] and
-          expression == b.get("condition", {}).get("expression", "")
+          expression == b.get("condition", {}).get("expression", "") and
+          constant.ACTIVATION_CONDITION_TITLE == b.get("condition", {}).get(
+          "title", "")
         ):
             b["members"].remove(member)
             binding_count += 1
             continue
 
     policy["bindings"][:] = [b for b in policy["bindings"] if b["members"]]
-    # if "members" in binding and member in binding["members"]:
-    #     binding["members"].remove(member)
-    # jit_logger.info(binding)
 
     service.projects().setIamPolicy(
       resource=target_project,

@@ -1,5 +1,7 @@
 from enum import Enum
 
+ACTIVATION_CONDITION_TITLE = "JIT access activation"
+
 
 class MessageOrigin(Enum):
     APPROVAL = "jit-approval"

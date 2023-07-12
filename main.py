@@ -9,15 +9,7 @@ from jit.utils import config
 from jit.utils.logger import jit_logger
 
 app = Flask(__name__)
-
 conf = config.parse_env()
-
-
-@app.route("/hello")
-def hello_world():
-    """Example Hello World route."""
-    name = os.environ.get("NAME", "World")
-    return f"Hello {name}!"
 
 
 @app.route("/scheduler", methods=['POST'])
