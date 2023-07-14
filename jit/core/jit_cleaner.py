@@ -78,6 +78,9 @@ def modify_policy_remove_member(conf: config.JitConfig, target_project: str,
         return
     binding_count = 0
     for b in policy["bindings"]:
+        # In order to delete a binding we need to match the original binding request, including
+        # the member, role, expression and condition title. This is to prevent deleting any other
+        # conditional bindings that were not created by JIT.
         if (
           role == b["role"] and
           member in b["members"] and
@@ -96,6 +99,7 @@ def modify_policy_remove_member(conf: config.JitConfig, target_project: str,
         return
     policy["bindings"][:] = [b for b in policy["bindings"] if b["members"]]
 
+    # Update the project IAM policy
     service.projects().setIamPolicy(
       resource=target_project,
       body={"policy": policy}
@@ -107,8 +111,6 @@ def modify_policy_remove_member(conf: config.JitConfig, target_project: str,
 def process_pubsub_msg(conf: config.JitConfig,
   received_message: MutableSequence["ReceivedMessage"]) -> bool:
     """
-    if message origin is not binding, we directly ack it, to clean up the pubsub
-
     if message expired, call modify_policy_remove_member to remove the binding.
 
     if current datetime > publishTime + 6 days
@@ -125,11 +127,11 @@ def process_pubsub_msg(conf: config.JitConfig,
     jit_logger.info(f"attributes: {received_message.message.attributes}")
     origin = received_message.message.attributes.get("origin", "")
     # for invalid origin, we should directly return and make the run_jit_cleaner
-    # ack the message.
+    # ack the message. However this typically means that the pubsub subscription filter is wrong
     if not origin or constant.MessageOrigin.from_str(
       origin) != constant.MessageOrigin.BINDING:
         jit_logger.error(
-          f"origin invalid: origin={origin}, msg data = {received_message.message.data}.")
+          f"origin invalid: origin={origin}, msg data = {received_message.message.data}. Check your pubsub subscription filter")
         return True
 
     # if any of these process invalid, it may raise exception,
@@ -151,15 +153,16 @@ def process_pubsub_msg(conf: config.JitConfig,
       timezone.utc)
     time_for_now = datetime.now(timezone.utc)
     if end_datetime < time_for_now:
-        jit_logger.info(f"access expired: {received_message.message}")
+        jit_logger.info(f"access expired: {received_message.message}, cleanup required.")
         modify_policy_remove_member(conf, target_project_id, role, member,
                                     start, end)
     elif publish_time + timedelta(days=6) < time_for_now:
         republish(conf.pubsub_topic_name, received_message.message.data,
                   constant.MessageOrigin.BINDING.value)
     else:
-        # rest of the cases are not expired cases, we dont do ack
+        # rest of the cases are not expired cases, we dont do ack and the message will reappear on the queue
         return False
+    # if we've dealt with the message then we will ACK it
     return True
 
 
