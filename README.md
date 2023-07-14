@@ -58,7 +58,8 @@ TOPIC_ID="jit-access"
 # Please refer to Jit with pubsub integration guide
 gcloud pubsub subscriptions create $SUBSCRIPTION_ID --topic=$TOPIC_ID \
 --project=$PROJECT_ID \
---ack-deadline=300
+--ack-deadline=300 \
+--message-filter="(attributes.origin=\"jit-binding\")"
 
 gcloud scheduler jobs create http jit-cleanup --schedule "0 * * * *" --uri "https://jit-cleanup-y3xxuiynlq-as.a.run.app/scheduler" \
 --oidc-service-account-email=${SERVICE_ACCOUNT_EMAIL} \
