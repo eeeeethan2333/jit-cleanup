@@ -135,11 +135,12 @@ def process_pubsub_msg(conf: config.JitConfig,
     # if any of these process invalid, it may raise exception,
     # the exception will be captured in run_jit_cleaner level
     pubsub_msg_dict = json.loads(received_message.message.data)
-    target_project_id = pubsub_msg_dict["project_id"]
-    condition = pubsub_msg_dict["conditions"]
+    payload = pubsub_msg_dict["payload"]
+    target_project_id = payload["project_id"]
+    condition = payload["conditions"]
     expression = condition["expression"]
-    member = "user:{user}".format(user=pubsub_msg_dict["user"])
-    role = pubsub_msg_dict["role"]
+    member = "user:{user}".format(user=payload["user"])
+    role = payload["role"]
 
     start = expression.get("start", "1900-01-01T00:00:00.00000Z")
     end = expression.get("end", "1900-01-01T00:00:00.00000Z")
@@ -205,13 +206,15 @@ def run_jit_cleaner(conf: config.JitConfig):
                         google.auth.exceptions.DefaultCredentialsError) as google_ex:
                     # if google api exception,
                     # we should not ack it, and make it reappear.
-                    jit_logger.error("process pubsub google api exception: ",
-                                     google_ex)
+                    jit_logger.exception(
+                        "process pubsub google api exception: %s",
+                        google_ex)
                     continue
+
                 except Exception as e:
                     # if general exception, basically data format issues.
                     # we directly ignore the message and ack it.
-                    jit_logger.error("process pubsub exception: ", e)
+                    jit_logger.exception("process pubsub exception: %s", e)
 
             if not ack_ids:
                 continue
