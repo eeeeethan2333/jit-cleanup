@@ -153,7 +153,8 @@ def process_pubsub_msg(conf: config.JitConfig,
       timezone.utc)
     time_for_now = datetime.now(timezone.utc)
     if end_datetime < time_for_now:
-        jit_logger.info(f"access expired: {received_message.message}, cleanup required.")
+        jit_logger.info(
+          f"access expired: {received_message.message}, cleanup required.")
         modify_policy_remove_member(conf, target_project_id, role, member,
                                     start, end)
     elif publish_time + timedelta(days=6) < time_for_now:
@@ -202,22 +203,31 @@ def run_jit_cleaner(conf: config.JitConfig):
 
             ack_ids = []
             for received_message in response.received_messages:
+                is_ack = True
                 try:
                     is_ack = process_pubsub_msg(conf, received_message)
-                    ack_ids += [received_message.ack_id] if is_ack else []
+
                 except (google.auth.exceptions.MutualTLSChannelError,
                         google.auth.exceptions.DefaultCredentialsError) as google_ex:
                     # if google api exception,
                     # we should not ack it, and make it reappear.
                     jit_logger.exception(
-                        "process pubsub google api exception: %s",
-                        google_ex)
-                    continue
+                      "process pubsub google api exception: %s",
+                      google_ex)
+                    republish(conf.pubsub_topic_name,
+                              received_message.message.data,
+                              constant.MessageOrigin.ERROR.value)
+                    is_ack = True
 
                 except Exception as e:
                     # if general exception, basically data format issues.
                     # we directly ignore the message and ack it.
                     jit_logger.exception("process pubsub exception: %s", e)
+                    republish(conf.pubsub_topic_name,
+                              received_message.message.data,
+                              constant.MessageOrigin.ERROR.value)
+                    is_ack = True
+                ack_ids += [received_message.ack_id] if is_ack else []
 
             if not ack_ids:
                 continue
