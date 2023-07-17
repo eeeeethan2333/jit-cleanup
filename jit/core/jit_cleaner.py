@@ -12,6 +12,7 @@ from google.oauth2 import service_account  # type: ignore
 
 from jit.utils import config
 from jit.utils import constant
+from jit.utils import string_utils
 from jit.utils.logger import jit_logger
 
 
@@ -146,8 +147,10 @@ def process_pubsub_msg(conf: config.JitConfig,
 
     start = expression.get("start", "1900-01-01T00:00:00.00000Z")
     end = expression.get("end", "1900-01-01T00:00:00.00000Z")
-    end_datetime = datetime.strptime(end, "%Y-%m-%dT%H:%M:%S.%fZ").replace(
-      tzinfo=timezone.utc)
+    
+    end_datetime = string_utils.try_parsing_date(
+      end, ["%Y-%m-%dT%H:%M:%S.%fZ", "%Y-%m-%dT%H:%M:%SZ"]
+    )
 
     publish_time = received_message.message.publish_time.astimezone(
       timezone.utc)
