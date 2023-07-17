@@ -229,7 +229,7 @@ def run_jit_cleaner(conf: config.JitConfig):
                     republish(conf.pubsub_topic_name,
                               received_message.message.data,
                               constant.MessageOrigin.ERROR.value)
-                    is_ack = True
+                    is_ack = False
                 ack_ids += [received_message.ack_id] if is_ack else []
 
             if not ack_ids:
