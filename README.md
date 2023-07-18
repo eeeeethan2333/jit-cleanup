@@ -22,58 +22,89 @@ Instead of storing state in a database, we can use PubSub to store events until 
 
 ## Deployment setup
 ### Before You Start
-Make sure you have the [JIT developed in your GCP environment](https://cloud.google.com/architecture/manage-just-in-time-privileged-access-to-project)
+Make sure you have the latest version of [JIT deployed in your GCP environment](https://cloud.google.com/architecture/manage-just-in-time-privileged-access-to-project)
 
 
 ### Deploy code
+Set the following environment variables, updating PROJECT_ID value:
 ```shell
+PROJECT_ID=<SET VALUE HERE>
 REGION=asia-southeast1
-PROJECT_ID=xxx
-SERVICE=jit-cleanup
-SERVICE_ACCOUNT_EMAIL=jitaccess@xxx.iam.gserviceaccount.com
-REPO_NAME=jit-repo
-PUBSUB_TOPIC_NAME=projects/xxx/topics/jit-access
-PUBSUB_SUBSCRIPTION_PATH=projects/xxx/subscriptions/jit-sub
+PROJECT_NUMBER=$(gcloud projects describe $PROJECT_ID --format 'value(projectNumber)')
+SERVICE=jitcleanup
+SERVICE_ACCOUNT_EMAIL=jitaccess@$PROJECT_ID.iam.gserviceaccount.com
+PUBSUB_TOPIC_NAME=projects/$PROJECT_ID/topics/jit-access
+SUBSCRIPTION_ID=jit-binding
+PUBSUB_SUBSCRIPTION_PATH=projects/$PROJECT_ID/subscriptions/$SUBSCRIPTION_ID
+```
 
-docker build --platform linux/amd64 -t ${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${SERVICE}:latest .
-docker push ${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${SERVICE}:latest
-gcloud run deploy ${SERVICE} \
---image ${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${SERVICE}:latest \
---service-account=${SERVICE_ACCOUNT_EMAIL} \
---region=${REGION} \
---port=8080 \
---set-env-vars "PROJECT_ID=${PROJECT_ID}" \
---set-env-vars "PUBSUB_TOPIC_NAME=${PUBSUB_TOPIC_NAME}" \
---set-env-vars "PUBSUB_SUBSCRIPTION_PATH=${PUBSUB_SUBSCRIPTION_PATH}" \
---set-env-vars "NUM_MESSAGES=100" \
---memory=2G \
---no-allow-unauthenticated
-
-# --set-env-vars=CAI_BUCKET_NAME=${_CAI_BUCKET_NAME} \
-
-SUBSCRIPTION_ID="jit-sub"
-TOPIC_ID="jit-access"
-
-# NOTE: the subscription haves to be created together with the topic.
-# Please refer to Jit with pubsub integration guide
-gcloud pubsub subscriptions create $SUBSCRIPTION_ID --topic=$TOPIC_ID \
+Create a specific pubsub subscription that only recieves jit-binding messages. The ack-deadline determines how long a message takes to re-appear on the queue.
+```
+gcloud pubsub subscriptions create $SUBSCRIPTION_ID --topic=$PUBSUB_TOPIC_NAME \
 --project=$PROJECT_ID \
 --ack-deadline=300 \
 --message-filter="(attributes.origin=\"jit-binding\")"
+```
+Build the container image and push it to your container registry.
+```
+docker build --platform linux/amd64 -t gcr.io/${PROJECT_ID}/${SERVICE}:latest .
+docker push gcr.io/${PROJECT_ID}/${SERVICE}:latest
+```
+create an app.yaml file to configure and deploy the container
+```
+cat << EOF > app.yaml
 
-gcloud scheduler jobs create http jit-cleanup --schedule "0 * * * *" --uri "https://jit-cleanup-y3xxuiynlq-as.a.run.app/scheduler" \
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: ${SERVICE}
+  namespace: ${PROJECT_NUMBER}
+  labels:
+    cloud.googleapis.com/location: $REGION
+  annotations:
+    run.googleapis.com/ingress: internal
+spec:
+  template:
+    spec:
+      serviceAccountName: $SERVICE_ACCOUNT_EMAIL
+      containers:
+      - image: gcr.io/${PROJECT_ID}/${SERVICE}:latest
+        env:
+        - name: PROJECT_ID
+          value: "${PROJECT_ID}"
+        - name: NUM_MESSAGES
+          value: "20"
+        - name: PUBSUB_TOPIC_NAME
+          value: "${PUBSUB_TOPIC_NAME}"
+        - name: PUBSUB_SUBSCRIPTION_PATH
+          value: "${PUBSUB_SUBSCRIPTION_PATH}"
+EOF
+```
+Deploy the container
+```
+gcloud run services replace app.yaml
+RUN_SERVICE=$(gcloud run services describe ${SERVICE} --format 'value(status.address.url)')
+```
+Add IAM permissions to allow the service account to invoke Cloud Run service:
+```
+gcloud run services add-iam-policy-binding ${SERVICE} \
+   --member=serviceAccount:${SERVICE_ACCOUNT_EMAIL} \
+   --role=roles/run.invoker
+```
+Create a regular cleanup job to run on the hour, every hour:
+```
+gcloud scheduler jobs create http ${SERVICE} --schedule "0 * * * *" --uri "$RUN_SERVICE/scheduler" \
 --oidc-service-account-email=${SERVICE_ACCOUNT_EMAIL} \
+--location=$REGION \
 --http-method POST --headers Content-Type=application/json \
---message-body='{}' \
---timeout=500
-
+--message-body='{}'
 ```
 
 
 ### Local Development
-
+Set the following environment variable when running locally for development
 ```bash
-export NUM_MESSAGES=100
+export NUM_MESSAGES=20
 export PROJECT_ID=xxx
 export PUBSUB_SUBSCRIPTION_PATH=projects/xxx/subscriptions/jit-sub
 export PUBSUB_TOPIC_NAME=projects/xxx/topics/jit-access
