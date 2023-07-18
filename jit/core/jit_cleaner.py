@@ -15,7 +15,7 @@ from jit.utils import constant
 from jit.utils.logger import jit_logger
 
 
-def republish(pubsub_topic_name, message_data, jit_origin):
+def publish(pubsub_topic_name, message_data, jit_origin):
     publisher = pubsub_v1.PublisherClient()
     future = publisher.publish(
       pubsub_topic_name,
@@ -23,7 +23,7 @@ def republish(pubsub_topic_name, message_data, jit_origin):
       origin=jit_origin
     )
     jit_logger.info(
-      "putting back to queue. jit_origin=%s, message_data=%s, msg_id=%s",
+      "publishing back to queue. jit_origin=%s, message_data=%s, msg_id=%s",
       jit_origin, message_data, future.result()
     )
 
@@ -157,13 +157,16 @@ def process_pubsub_msg(conf: config.JitConfig,
         modify_policy_remove_member(conf, target_project_id, role, member,
                                     start, end)
     elif publish_time + timedelta(days=6) < time_for_now:
-        republish(conf.pubsub_topic_name, received_message.message.data,
+        publish(conf.pubsub_topic_name, received_message.message.data,
                   constant.MessageOrigin.BINDING.value)
     else:
         # The binding is not expired, we dont ACK the message
         # and the message will reappear on the queue after the visibility timeout
         return False
-    # If we've dealt with the message then we will ACK it
+    # If we've dealt with the message then we will publish a new message
+    publish(conf.pubsub_topic_name, received_message.message.data,
+                  constant.MessageOrigin.CLEANUP.value)
+    # Then ACK it
     return True
 
 
