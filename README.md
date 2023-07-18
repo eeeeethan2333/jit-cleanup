@@ -1,31 +1,29 @@
 # jit-cleanup
 
-This is python web application which is to clean up [jit-access](https://github.com/GoogleCloudPlatform/jit-access) expired permission.
+A Python web application which is cleans up expired [jit-access](https://github.com/GoogleCloudPlatform/jit-access) IAM permission bindings.
 
 
 ## Background
-There is an existing solution published on the GCP architecture site which provides just in time access, open sourced as [jit-access](https://github.com/GoogleCloudPlatform/jit-access). It leverages an IAP protected application and templated IAM permissions to grant users time based privileged access. It provides a robust solution that includes logging, self approval, multi-party approval and variable time based access.
-Under the hood it creates specific user permissions with IAM conditions to enforce time based access. The tool is additive, and each new request generates a user IAM binding with a new condition, unless the variable PURGE_EXISTING_TEMPORARY_BINDINGS  (currently undocumented)  is set in the app.yaml. In that scenario only a single conditional access binding per user is maintained.
+The [jit-access](https://github.com/GoogleCloudPlatform/jit-access) provides a mechanism to grant elevated IAM permission just in time. It does this by creating IAM user bindings with conditional access. These bindings can be replaced when expired, but they still exist in the project IAM policy after expiration. 
 
-Here is [how to setup](https://cloud.google.com/architecture/manage-just-in-time-privileged-access-to-project) JIT in GCP.
-
-In general purging temporary bindings option will avoid hitting limits on max conditional bindings, but there are some challenges to implement this sometimes, including:
-
-- IaC drift: will occur when temporary permissions are implemented using direct API calls instead of IaC. This can lead to changes in the project IAM binding configuration, which can be an operational risk.
-- Compliance issue: Any JIT conditional bindings may trigger a failure in PaC unless we can exclude them.
+Whilst its permissible to have expired bindings in the IAM policy this has a few implications to consider
+- Additional complexity when trying to review access permissions which include a lot of expired bindings
+- IaC drift can occur when temporary permissions are implemented using direct API calls instead of IaC. This can lead to changes in the project IAM binding configuration, which can be an operational risk.
+- Compliance issues caused by conditional bindings which violate PaC rules.
 
 ## Solution
-The easiest way to handle expired user based bindings is to remove the conditional access after expiry. This can be accomplished by running a periodic cleanup task to remove expired bindings.
-Instead of storing state in a database, we can use PubSub to store events until they are processed. This allows multiple components to act on published events, not just for removing conditional bindings. This provides more flexibility and scalability.
+Instead of storing state in a database, we use Pub/Sub to store events until they are processed or expire. This allows multiple components to act on published events from jit-acces, not just for removing conditional bindings. 
 
+This solution demonstrates how to specifically clean up expired IAM bindings created by jit-access, based on messages send to a specific Pub/Sub topic.
 
+The easiest way to handle expired user based bindings is to remove the conditional access after expiry. This can be accomplished by running a periodic cleanup task to remove expired bindings created by jit-access.
 
-## Deployment setup
+## Setup & Deployment
 ### Before You Start
 Make sure you have the latest version of [JIT deployed in your GCP environment](https://cloud.google.com/architecture/manage-just-in-time-privileged-access-to-project)
 
 
-### Deploy code
+### Setup Environment
 Set the following environment variables, updating PROJECT_ID value:
 ```shell
 PROJECT_ID=<SET VALUE HERE>
@@ -45,6 +43,7 @@ gcloud pubsub subscriptions create $SUBSCRIPTION_ID --topic=$PUBSUB_TOPIC_NAME \
 --ack-deadline=300 \
 --message-filter="(attributes.origin=\"jit-binding\")"
 ```
+### Build Deployment
 Build the container image and push it to your container registry.
 ```
 docker build --platform linux/amd64 -t gcr.io/${PROJECT_ID}/${SERVICE}:latest .
@@ -80,6 +79,7 @@ spec:
           value: "${PUBSUB_SUBSCRIPTION_PATH}"
 EOF
 ```
+### Deploy
 Deploy the container
 ```
 gcloud run services replace app.yaml
@@ -101,12 +101,12 @@ gcloud scheduler jobs create http ${SERVICE} --schedule "0 * * * *" --uri "$RUN_
 ```
 
 
-### Local Development
+### Local Development Setup
 Set the following environment variable when running locally for development
 ```bash
-export NUM_MESSAGES=20
-export PROJECT_ID=xxx
-export PUBSUB_SUBSCRIPTION_PATH=projects/xxx/subscriptions/jit-sub
-export PUBSUB_TOPIC_NAME=projects/xxx/topics/jit-access
+export PROJECT_ID=<SET VALUE HERE>
+export PUBSUB_TOPIC_NAME=projects/$PROJECT_ID/topics/jit-access
+export SUBSCRIPTION_ID=jit-binding
+export PUBSUB_SUBSCRIPTION_PATH=projects/$PROJECT_ID/subscriptions/$SUBSCRIPTION_ID
 python main.py
 ```
