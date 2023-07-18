@@ -8,6 +8,7 @@ class MessageOrigin(Enum):
     BINDING = "jit-binding"
     ERROR = "jit-error"
     NOTIFICATION = "jit-notification"
+    CLEANUP = "jit-cleanup"
     TEST = "jit-test"
     NOT_IMPLEMENTED = "not-implemented"
 
@@ -19,6 +20,8 @@ class MessageOrigin(Enum):
             return cls.ERROR
         elif label == "jit-notification":
             return cls.NOTIFICATION
+        elif label == "jit-cleanup":
+            return cls.CLEANUP
         elif label == "jit-binding":
             return cls.BINDING
         else:
