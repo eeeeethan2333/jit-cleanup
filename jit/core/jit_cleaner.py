@@ -12,7 +12,6 @@ from google.oauth2 import service_account  # type: ignore
 
 from jit.utils import config
 from jit.utils import constant
-from jit.utils import string_utils
 from jit.utils.logger import jit_logger
 
 
@@ -145,15 +144,12 @@ def process_pubsub_msg(conf: config.JitConfig,
     member = "user:{user}".format(user=payload["user"])
     role = payload["role"]
 
-    start = expression.get("start", "1900-01-01T00:00:00.00000Z")
-    end = expression.get("end", "1900-01-01T00:00:00.00000Z")
-    
-    end_datetime = string_utils.try_parsing_date(
-      end, ["%Y-%m-%dT%H:%M:%S.%fZ", "%Y-%m-%dT%H:%M:%SZ"]
-    )
+    start = expression.get("start", "1900-01-01T00:00:00Z")
+    end = expression.get("end", "1900-01-01T00:00:00Z")
+    fmt = "%Y-%m-%dT%H:%M:%SZ"
+    end_datetime = datetime.strptime(end, fmt).replace(tzinfo=timezone.utc)
 
-    publish_time = received_message.message.publish_time.astimezone(
-      timezone.utc)
+    publish_time = received_message.message.publish_time.astimezone(timezone.utc)
     time_for_now = datetime.now(timezone.utc)
     if end_datetime < time_for_now:
         jit_logger.info(
@@ -164,9 +160,10 @@ def process_pubsub_msg(conf: config.JitConfig,
         republish(conf.pubsub_topic_name, received_message.message.data,
                   constant.MessageOrigin.BINDING.value)
     else:
-        # rest of the cases are not expired cases, we dont do ack and the message will reappear on the queue
+        # The binding is not expired, we dont ACK the message
+        # and the message will reappear on the queue after the visibility timeout
         return False
-    # if we've dealt with the message then we will ACK it
+    # If we've dealt with the message then we will ACK it
     return True
 
 
@@ -212,23 +209,22 @@ def run_jit_cleaner(conf: config.JitConfig):
 
                 except (google.auth.exceptions.MutualTLSChannelError,
                         google.auth.exceptions.DefaultCredentialsError) as google_ex:
-                    # if google api exception,
-                    # we should not ack it, and make it reappear.
+                    # If there are are any Google API exceptions, then
+                    # we should NOT ack the msg, just wait for it to reappear and retry
                     jit_logger.exception(
                       "process pubsub google api exception: %s",
                       google_ex)
-                    republish(conf.pubsub_topic_name,
-                              received_message.message.data,
-                              constant.MessageOrigin.ERROR.value)
-                    is_ack = True
 
-                except Exception as e:
-                    # if general exception, basically data format issues.
-                    # we directly ignore the message and ack it.
-                    jit_logger.exception("process pubsub exception: %s", e)
-                    republish(conf.pubsub_topic_name,
-                              received_message.message.data,
-                              constant.MessageOrigin.ERROR.value)
+                    is_ack = False
+
+                except ValueError as value_ex:
+                    jit_logger.exception("process pubsub date error: %s", value_ex)
+                    is_ack = False
+
+                except Exception as ex:
+                    # If there is a general exception, then
+                    # we log it and do NOT ack it, we need to fix the bugs
+                    jit_logger.exception("process pubsub exception: %s", ex)
                     is_ack = False
                 ack_ids += [received_message.ack_id] if is_ack else []
 
