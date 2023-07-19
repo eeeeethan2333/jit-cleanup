@@ -28,18 +28,18 @@ Set the following environment variables, updating PROJECT_ID value:
 ```shell
 PROJECT_ID=<SET VALUE HERE>
 REGION=asia-southeast1
-PROJECT_NUMBER=$(gcloud projects describe $PROJECT_ID --format 'value(projectNumber)')
+PROJECT_NUMBER=$(gcloud projects describe ${PROJECT_ID} --format 'value(projectNumber)')
 SERVICE=jitcleanup
-SERVICE_ACCOUNT_EMAIL=jitaccess@$PROJECT_ID.iam.gserviceaccount.com
-PUBSUB_TOPIC_NAME=projects/$PROJECT_ID/topics/jit-access
+SERVICE_ACCOUNT_EMAIL=jitaccess@${PROJECT_ID}.iam.gserviceaccount.com
+PUBSUB_TOPIC_NAME=projects/${PROJECT_ID}/topics/jit-access
 SUBSCRIPTION_ID=jit-binding
-PUBSUB_SUBSCRIPTION_PATH=projects/$PROJECT_ID/subscriptions/$SUBSCRIPTION_ID
+PUBSUB_SUBSCRIPTION_PATH=projects/${PROJECT_ID}/subscriptions/${SUBSCRIPTION_ID}
 ```
 
 Create a specific pubsub subscription that only recieves jit-binding messages. The ack-deadline determines how long a message takes to re-appear on the queue.
 ```
-gcloud pubsub subscriptions create $SUBSCRIPTION_ID --topic=$PUBSUB_TOPIC_NAME \
---project=$PROJECT_ID \
+gcloud pubsub subscriptions create ${SUBSCRIPTION_ID} --topic=${PUBSUB_TOPIC_NAME} \
+--project=${PROJECT_ID} \
 --ack-deadline=300 \
 --message-filter="(attributes.origin=\"jit-binding\")"
 ```
@@ -59,13 +59,13 @@ metadata:
   name: ${SERVICE}
   namespace: ${PROJECT_NUMBER}
   labels:
-    cloud.googleapis.com/location: $REGION
+    cloud.googleapis.com/location: ${REGION}
   annotations:
     run.googleapis.com/ingress: internal
 spec:
   template:
     spec:
-      serviceAccountName: $SERVICE_ACCOUNT_EMAIL
+      serviceAccountName: ${SERVICE_ACCOUNT_EMAIL}
       containers:
       - image: gcr.io/${PROJECT_ID}/${SERVICE}:latest
         env:
@@ -80,33 +80,45 @@ spec:
 EOF
 ```
 ### Deploy
-Deploy the container
+Deploy the container to Cloud Run using the configuration in the app.yaml file
 ```
 gcloud run services replace app.yaml
 RUN_SERVICE=$(gcloud run services describe ${SERVICE} --format 'value(status.address.url)')
 ```
+### Schedule Cleanup Job
+We use Cloud Scheduler to invoke the Cloud Run jit-cleanup service with a specific non-priviledged service account.
+
+Create a new service account for use with Cloud Scheduler:
+```
+gcloud iam service-accounts create jit-scheduler --description="Cloud Scheduler SA to invoke Cloud Run"
+```
 Add IAM permissions to allow the service account to invoke Cloud Run service:
 ```
 gcloud run services add-iam-policy-binding ${SERVICE} \
-   --member=serviceAccount:${SERVICE_ACCOUNT_EMAIL} \
+   --member=serviceAccount:jit-scheduler@${PROJECT_ID}.gserviceaccount.com \
    --role=roles/run.invoker
 ```
+Enable the Cloud Scheduler service in the project
+```
+gcloud services enable cloudscheduler.googleapis.com
+```
+
 Create a regular cleanup job to run on the hour, every hour:
 ```
-gcloud scheduler jobs create http ${SERVICE} --schedule "0 * * * *" --uri "$RUN_SERVICE/scheduler" \
---oidc-service-account-email=${SERVICE_ACCOUNT_EMAIL} \
---location=$REGION \
+gcloud scheduler jobs create http ${SERVICE} --schedule "0 * * * *" --uri "${RUN_SERVICE}/scheduler" \
+--oidc-service-account-email=jit-scheduler@${PROJECT_ID}.gserviceaccount.com \
+--location=${REGION} \
 --http-method POST --headers Content-Type=application/json \
 --message-body='{}'
 ```
 
 
-### Local Development Setup
+## Local Development Setup
 Set the following environment variable when running locally for development
 ```bash
 export PROJECT_ID=<SET VALUE HERE>
-export PUBSUB_TOPIC_NAME=projects/$PROJECT_ID/topics/jit-access
+export PUBSUB_TOPIC_NAME=projects/${PROJECT_ID}/topics/jit-access
 export SUBSCRIPTION_ID=jit-binding
-export PUBSUB_SUBSCRIPTION_PATH=projects/$PROJECT_ID/subscriptions/$SUBSCRIPTION_ID
+export PUBSUB_SUBSCRIPTION_PATH=projects/${PROJECT_ID}/subscriptions/${SUBSCRIPTION_ID}
 python main.py
 ```
